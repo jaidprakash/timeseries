@@ -1,0 +1,143 @@
+---
+title: "Mod 4 Individual Assignment"
+author: "MBA 592 Team"
+date: "9/23/2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(fPortfolio)
+library(quantmod)
+library(ggplot2)
+library(BatchGetSymbols)
+library(timeSeries)
+```
+
+# In this assignment, you are asked to use some of the commands demonstrated in the video examples to complete an exercise in R. You will then be asked to interpret the results.  
+# For this assignment, you may use any resources necessary to be able to execute the code.  However, the interpretation should reflect your own thinking.
+# If you are asked to interpret results, make sure to put your answers in a comment line which start with a #.
+
+# The data used for this assignment will be the Google stock prices downloaded from Yahoo using the function - getSymbols() from the quantmod package. 
+
+
+
+# For this assignment, you will download stock price data for the 3 stocks you have chosen for the mid term project and two other stocks of your choice. With the five stocks, create a portfolio that generates the highest risk adjusted returns and a portfolio with the least variance.
+
+# Refer to the library codes above and install any of the packages mentioned if not already installed.
+
+# For the appropriate ticker symbols, check the ticker in the data frame -SnP500. Run the code chunk below
+
+```{r}
+#sp500 <- GetSP500Stocks()
+#SnP500 <- sp500[-c(72,85,459),c(1,2,4)] # remove UA, BRK.B and BF.B
+#rm(sp500)
+```
+
+# In the code below, store the ticker symbols of the 5 stocks that you have chosen in the variable - "stocks". Run the code chunk to download the adjusted closing prices data for the five stocks that you have chosen using the getSymbols() function. 
+
+```{r}
+# Store the ticker symbols in the following vector
+#stocks <- SnP500$Tickers 
+#stocks <- c("AMZN","GOOGL","MSFT","V","MA","WMT","AAPL","COST","CRM")
+stocks <- c("VTI","TLT","IEI","GLD","GSG")
+stockCount = 5
+# Creates an empty dataframe
+prices <- cbind() 
+for (i in stocks){
+  prices.tmp <- getSymbols(i, source="yahoo", auto.assign=FALSE,
+                     return.class="xts")[,6]
+  prices <- cbind(prices, prices.tmp)
+}
+# Enter the names of the stocks in the following vector in the 
+# same order that you have entered the stocks tickers above
+
+#colnames(prices) <- c("AMZN","GOOGL","MSFT","V","MA","WMT","AAPL","COST","CRM")  
+colnames(prices) <- c("VTI","TLT","IEI","GLD","GSG")
+
+#SnP500$Tickers #c("Tesla","Ford","GeneralMotors","Adv Auto Parts","Carmax")
+
+```
+
+# Question 1 - Now that you the stock price data for all the 5 stocks in one place, convert it to log  returns(use the diff(log()) function and na.omit to remove the NAs). Using the summary() function, deternmine which stock has the highest expected returns? Convert the data into a time series data using the as.timeSeries() function. 
+
+```{r}
+prices.ret <- diff(log(prices))
+prices.ret <- na.omit(prices.ret)
+summary(prices.ret)
+prices.ret.ts <- as.timeSeries(prices.ret)
+```
+#Tesla has the highest Mean return of the 5 stocks at 0.0009
+
+# Question 2 - Determine the efficient frontier of the portfolio that contains the 5 stocks (Use portfolioFrontier() function). Plot the efficient frontier(Use the list c(1,2,3) within the plot() function to get only the necessary points. All the portfolios in the frontier should be Long-Only portfolios.(Use the contraints parameter within the portfolioFrontier() function). What do the points that are denoted by a special symbol signify? 
+
+```{r}
+pf <- portfolioFrontier(prices.ret.ts, constraints = "LongOnly")
+print(pf)
+
+frontierPlot(pf)
+#What do the points that are denoted by a special symbol signify? 
+```
+
+# Question 3 - Obtain the portfolio weights of all the portfolios in the efficient frontier(Use getWeigths() function). Print the weights of the first six portfolios.
+
+```{r}
+head(getWeights(pf), n=6)
+weightsPlot(pf)
+```
+
+# Question 4 - Obtain the weights of the Minimum variance portfolio and the tangency portfolio.(Use minvariancePortfolio() and tangencyPortfolio). Are any stocks left uninvested and if so, what might be the reason?
+
+```{r}
+mvP <- minvariancePortfolio(prices.ret.ts, constraints = "LongOnly")
+tP <- tangencyPortfolio(prices.ret.ts)
+
+#Print and Plot Weights
+writeLines("\nMinVar and Tangency Portfolio Weights\n")
+x <- matrix(ncol = 2,nrow = stockCount, dimnames = list(colnames(prices), c("mvP","tP")))
+x <- cbind(getWeights(mvP),getWeights(tP))
+colnames(x) <- c("mvp Weights","tp Weights")
+x
+
+#graph the Weights
+#par(mfrow=c(2,2))
+weightsPie(tP)
+#weightsPie(mvP)
+
+writeLines("\nTangency Portfolio Stats\n")
+#Get details for Tangency portfolio to investigate why Ford and GM are excluded, 
+getStatistics(tP)
+```
+
+# Question 5 - Tabulate the annualized risk and return(Use frontierPoints() function to obtain daily risk and return for all the portfolios) for each point on the efficient frontier(Annualized risk = Daily risk*sqrt(252), Annualized returns = Daily returns * 252). Calculate the Sharpe Ratio for each point on the Efficient frontier(Sharpe Ratio = (Annualized Return-Risk Free Rate)/(Annulaized Risk)). Plot the Sharpe Ratio curve for the efficient frontier portfolios. Discuss the portfolio with the highest Sharpe Ratio.(Assume risk free rate to be 2%).
+
+```{r}
+#Calculating Sharpe Ratio for every POrtfolio
+risk_return <- as.data.frame(frontierPoints(pf))
+risk_return <- cbind(risk_return,risk_return$targetRisk*sqrt(252),risk_return$targetReturn*252)
+colnames(risk_return) <- c("tgtRisk", "tgtReturn", "annualizedRisk", "annualizedReturn")
+sharpeRatio <- (risk_return$annualizedReturn - 0.02)/risk_return$annualizedRisk
+risk_return <- cbind(risk_return,sharpeRatio)
+
+#Print Sharpe Ration for the first 6 portfolios
+head(risk_return,n=6)
+risk_return[which(sharpeRatio==max(sharpeRatio)),]
+```
+
+```{r}
+# Plotting the Sharpe Curve on the Eff Frontier with the Tangency Line and MVP
+plot.new()
+frontierPlot(pf)
+tangencyLines(tP,col="green")
+minvariancePoints(mvP,col="red",pch=20)
+sharpeRatioLines(pf,col="blue")
+grid()
+
+
+```
+```{r}
+mvP
+risk_return
+```
